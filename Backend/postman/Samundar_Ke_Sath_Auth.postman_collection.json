@@ -1,0 +1,296 @@
+{
+  "info": {
+    "_postman_id": "a98402bc-a24d-4cb1-85f2-9599d1469e71",
+    "name": "Samundar Ke Sath - Authentication API",
+    "description": "Comprehensive Postman test collection for the authentication system of Samundar Ke Sath.\nIncludes automated token propagation, input validation checks, protected endpoints, and Google OAuth.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "health"]
+        },
+        "description": "Verifies that the backend server is operational."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Register User",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test(\"Token is returned and stored\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData.data.token).to.be.a('string');",
+              "    pm.expect(jsonData.data.user.password).to.be.undefined;",
+              "    pm.collectionVariables.set(\"authToken\", jsonData.data.token);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Aarav Patel\",\n  \"email\": \"aarav.patel@example.com\",\n  \"password\": \"CoastalSecret123!\",\n  \"preferences\": {\n    \"preferredCurrency\": \"INR\",\n    \"travelStyle\": [\"coastal\", \"adventure\"]\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "register"]
+        },
+        "description": "Registers a new user and automatically populates the {{authToken}} variable for subsequent protected requests."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Login User",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Login token received and set\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData.data.token).to.be.a('string');",
+              "    pm.collectionVariables.set(\"authToken\", jsonData.data.token);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"aarav.patel@example.com\",\n  \"password\": \"CoastalSecret123!\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "login"]
+        },
+        "description": "Authenticates user credentials and stores the fresh JWT token."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Google OAuth Sign-In",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"idToken\": \"REPLACE_WITH_VALID_GOOGLE_OAUTH_ID_TOKEN\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/google",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "google"]
+        },
+        "description": "Exchanges a verified Google OAuth ID Token for a backend JWT. Verified via google-auth-library."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Get Current User (/me)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"User profile retrieved safely\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData.data.email).to.be.a('string');",
+              "    pm.expect(jsonData.data.password).to.be.undefined;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{authToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "me"]
+        },
+        "description": "Protected route that returns the authenticated user's profile."
+      },
+      "response": []
+    },
+    {
+      "name": "6. Update Profile",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{authToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Aarav Patel (Coastal Explorer)\",\n  \"preferences\": {\n    \"preferredCurrency\": \"INR\",\n    \"travelStyle\": [\"coastal\", \"luxury\"],\n    \"notificationsEnabled\": true\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/profile",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "profile"]
+        },
+        "description": "Protected endpoint to update profile details and preferences."
+      },
+      "response": []
+    },
+    {
+      "name": "7. Change Password",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{authToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"currentPassword\": \"CoastalSecret123!\",\n  \"newPassword\": \"NewCoastalPass789!\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/change-password",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "change-password"]
+        },
+        "description": "Protected route to securely change user password."
+      },
+      "response": []
+    },
+    {
+      "name": "8. Logout",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.collectionVariables.set(\"authToken\", \"\");"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{authToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/logout",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "logout"]
+        },
+        "description": "Protected route acknowledging session termination. Clears the stored {{authToken}} in Postman."
+      },
+      "response": []
+    }
+  ]
+}
+
