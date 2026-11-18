@@ -1,0 +1,502 @@
+{
+  "info": {
+    "_postman_id": "b78912cd-f5ef-4aa2-9651-789012345678",
+    "name": "Samundar Ke Sath - Complete REST API",
+    "description": "Production Postman test collection for Samundar Ke Sath backend.\nIncludes Authentication, Trip Management, Trip Members, and Itinerary/Activity workflows with automated variable chaining (authToken, tripId, memberId, itineraryId).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tripId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "memberId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "itineraryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "expenseId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            }
+          }
+        },
+        {
+          "name": "Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.token) {",
+                  "    pm.collectionVariables.set(\"authToken\", json.data.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Aarav Patel\",\n  \"email\": \"aarav.patel@example.com\",\n  \"password\": \"CoastalSecret123!\",\n  \"preferences\": {\n    \"preferredCurrency\": \"INR\",\n    \"travelStyle\": [\"coastal\", \"adventure\"]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.token) {",
+                  "    pm.collectionVariables.set(\"authToken\", json.data.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"aarav.patel@example.com\",\n  \"password\": \"CoastalSecret123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Google OAuth Sign-In",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"VALID_GOOGLE_ID_TOKEN_HERE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/google",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "google"]
+            }
+          }
+        },
+        {
+          "name": "Get Current User (/me)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/auth/me", "host": ["{{baseUrl}}"], "path": ["api", "auth", "me"] }
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Aarav Patel (Captain)\",\n  \"preferences\": {\n    \"travelStyle\": [\"coastal\", \"luxury\"],\n    \"preferredCurrency\": \"INR\"\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/profile", "host": ["{{baseUrl}}"], "path": ["api", "auth", "profile"] }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"CoastalSecret123!\",\n  \"newPassword\": \"NewCoastalPass456!\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/change-password", "host": ["{{baseUrl}}"], "path": ["api", "auth", "change-password"] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/auth/logout", "host": ["{{baseUrl}}"], "path": ["api", "auth", "logout"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Trip Management",
+      "item": [
+        {
+          "name": "Create Trip",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201 Created\", function () { pm.response.to.have.status(201); });",
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data._id) {",
+                  "    pm.collectionVariables.set(\"tripId\", json.data._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Goa Coastal Escapade\",\n  \"destination\": \"Goa, India\",\n  \"origin\": \"Mumbai\",\n  \"startDate\": \"2026-12-15\",\n  \"endDate\": \"2026-12-20\",\n  \"travelers\": 4,\n  \"budget\": 35000,\n  \"currency\": \"INR\",\n  \"status\": \"planning\",\n  \"description\": \"Exploring Palolem beach, scuba diving at Grande Island, and sunset dolphin cruise.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/trips", "host": ["{{baseUrl}}"], "path": ["api", "trips"] }
+          }
+        },
+        {
+          "name": "Get All User Trips (Paginated & Filtered)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/trips?status=planning&page=1&limit=10&sort=asc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "trips"],
+              "query": [
+                { "key": "status", "value": "planning" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "sort", "value": "asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Trip Details by ID",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}"] }
+          }
+        },
+        {
+          "name": "Update Trip",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"budget\": 40000,\n  \"status\": \"active\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}"] }
+          }
+        },
+        {
+          "name": "Delete Trip",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Trip Members",
+      "item": [
+        {
+          "name": "Add Member to Trip",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201 Created\", function () { pm.response.to.have.status(201); });",
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data._id) {",
+                  "    pm.collectionVariables.set(\"memberId\", json.data._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"partner.traveler@example.com\",\n  \"role\": \"editor\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}/members", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}", "members"] }
+          }
+        },
+        {
+          "name": "Get All Trip Members",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}/members", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}", "members"] }
+          }
+        },
+        {
+          "name": "Remove Trip Member",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}/members/{{memberId}}", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}", "members", "{{memberId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Trip Itinerary & Activities",
+      "item": [
+        {
+          "name": "Create Daily Itinerary & Activities",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201 Created\", function () { pm.response.to.have.status(201); });",
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data._id) {",
+                  "    pm.collectionVariables.set(\"itineraryId\", json.data._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-12-15\",\n  \"dayNumber\": 1,\n  \"notes\": \"Arrival in South Goa & beach sunset walk\",\n  \"activities\": [\n    {\n      \"title\": \"Check into Coastal Heritage Resort\",\n      \"category\": \"accommodation\",\n      \"startTime\": \"02:00 PM\",\n      \"endTime\": \"03:00 PM\",\n      \"estimatedCost\": 4500,\n      \"location\": { \"name\": \"Palolem Bay Resort\", \"address\": \"Palolem Beach Road\" }\n    },\n    {\n      \"title\": \"Sunset Kayaking & Dolphin Spotting\",\n      \"category\": \"water_sports\",\n      \"startTime\": \"04:30 PM\",\n      \"endTime\": \"06:30 PM\",\n      \"estimatedCost\": 1200,\n      \"location\": { \"name\": \"Colomb Cove, Palolem\" }\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}/itinerary", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}", "itinerary"] }
+          }
+        },
+        {
+          "name": "Get Trip Itineraries",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}/itinerary", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}", "itinerary"] }
+          }
+        },
+        {
+          "name": "Update Itinerary Day",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Updated: Sunset Kayaking & Seafood Beach Shack Dinner\",\n  \"activities\": [\n    {\n      \"title\": \"Check into Coastal Heritage Resort\",\n      \"category\": \"accommodation\",\n      \"startTime\": \"02:00 PM\",\n      \"endTime\": \"03:00 PM\",\n      \"estimatedCost\": 4500\n    },\n    {\n      \"title\": \"Sunset Kayaking & Dolphin Spotting\",\n      \"category\": \"water_sports\",\n      \"startTime\": \"04:30 PM\",\n      \"endTime\": \"06:30 PM\",\n      \"estimatedCost\": 1200\n    },\n    {\n      \"title\": \"Dinner at Dropadi Beach Shack\",\n      \"category\": \"dining\",\n      \"startTime\": \"08:00 PM\",\n      \"endTime\": \"10:00 PM\",\n      \"estimatedCost\": 1800\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}/itinerary/{{itineraryId}}", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}", "itinerary", "{{itineraryId}}"] }
+          }
+        },
+        {
+          "name": "Delete Itinerary Day",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}/itinerary/{{itineraryId}}", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}", "itinerary", "{{itineraryId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Expense Management & Budget Tracking",
+      "item": [
+        {
+          "name": "Create Expense (Equal Split)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201 Created\", function () { pm.response.to.have.status(201); });",
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data._id) {",
+                  "    pm.collectionVariables.set(\"expenseId\", json.data._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Luxury Coastal Speedboat Cruise\",\n  \"amount\": 6000,\n  \"category\": \"activities\",\n  \"splitType\": \"equal\",\n  \"notes\": \"Private chartered speedboat across South Goa beaches\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}/expenses", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}", "expenses"] }
+          }
+        },
+        {
+          "name": "Create Expense (Exact Custom Split)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Candlelight Beach Shack Dinner\",\n  \"amount\": 3000,\n  \"category\": \"food\",\n  \"splitType\": \"exact\",\n  \"participants\": [\n    { \"userId\": \"{{memberId}}\", \"shareAmount\": 1500 },\n    { \"userId\": \"USER_ID_2_HERE\", \"shareAmount\": 1500 }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}/expenses", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}", "expenses"] }
+          }
+        },
+        {
+          "name": "Get All Trip Expenses (Paginated & Filtered)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/trips/{{tripId}}/expenses?page=1&limit=20&sort=desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "trips", "{{tripId}}", "expenses"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "sort", "value": "desc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Expense by ID",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}/expenses/{{expenseId}}", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}", "expenses", "{{expenseId}}"] }
+          }
+        },
+        {
+          "name": "Update Expense",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 6500,\n  \"notes\": \"Updated: Includes safety gears & snorkeling kit\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}/expenses/{{expenseId}}", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}", "expenses", "{{expenseId}}"] }
+          }
+        },
+        {
+          "name": "Get Trip Budget Tracking",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}/budget", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}", "budget"] }
+          }
+        },
+        {
+          "name": "Get Expense Analytics & Category Breakdown",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}/expenses/analytics", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}", "expenses", "analytics"] }
+          }
+        },
+        {
+          "name": "Get Multi-Party Settlement Suggestions",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}/expenses/settlements", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}", "expenses", "settlements"] }
+          }
+        },
+        {
+          "name": "Delete Expense",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/trips/{{tripId}}/expenses/{{expenseId}}", "host": ["{{baseUrl}}"], "path": ["api", "trips", "{{tripId}}", "expenses", "{{expenseId}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}
+
