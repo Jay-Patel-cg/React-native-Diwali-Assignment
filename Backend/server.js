@@ -16,11 +16,20 @@ const PORT = process.env.PORT || 5000;
  */
 const startServer = async () => {
   try {
+    if (process.env.NODE_ENV === 'production') {
+      if (!process.env.JWT_SECRET) {
+        console.warn('[Config] WARNING: JWT_SECRET is not set. Authentication endpoints will fail.');
+      }
+      if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'your_gemini_api_key_here') {
+        console.warn('[Config] WARNING: GEMINI_API_KEY is not configured. AI endpoints will return 503.');
+      }
+    }
+
     // Attempt database connection
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
-        console.log('[Database] MongoDB Atlas connected successfully.');
+        console.log('[Database] MongoDB connected successfully.');
       } catch (dbError) {
         console.warn(
           `[Database] Initial MongoDB connection failed: ${dbError.message}`
@@ -35,7 +44,7 @@ const startServer = async () => {
       );
     }
 
-    // Launch HTTP listener (0.0.0.0 binds to all network interfaces for mobile testing)
+    // Launch HTTP listener (0.0.0.0 binds to all network interfaces for cloud/mobile testing)
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log('========================================================');
       console.log(`  Samundar Ke Sath Backend API`);
@@ -43,8 +52,8 @@ const startServer = async () => {
       console.log(`  Port        : ${PORT}`);
       console.log(`  Environment : ${process.env.NODE_ENV || 'development'}`);
       console.log(`  Local URL   : http://localhost:${PORT}/api`);
-      console.log(`  LAN URL     : http://0.0.0.0:${PORT}/api`);
-      console.log(`  Health Check: http://localhost:${PORT}/api/health`);
+      console.log(`  Bind URL    : http://0.0.0.0:${PORT}/api`);
+      console.log(`  Health Check: http://localhost:${PORT}/health (and /api/health)`);
       console.log('========================================================');
     });
 
