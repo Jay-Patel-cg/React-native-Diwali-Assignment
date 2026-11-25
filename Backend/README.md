@@ -246,6 +246,83 @@ $$\text{netBalance}_i = \text{totalPaid}_i - \text{totalOwed}_i$$
 
 ---
 
+## 🤖 AI Travel Copilot (Google Gemini API)
+
+Powered by the official `@google/genai` SDK (`gemini-3.8-flash` by default). All AI routes require JWT authentication (`Authorization: Bearer <token>`), pass through per-user rate limiting, enforce prompt-injection screening, and return structured JSON draft responses that are **never auto-saved without user confirmation**.
+
+### AI Endpoints
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/ai/plan-trip` | Full AI trip plan: title, summary, itinerary, food, tips, budget breakdown & alternatives |
+| `POST` | `/api/ai/generate-itinerary` | Day-wise timed itinerary tailored to pace, budget & interests |
+| `POST` | `/api/ai/recommend-destinations` | Personalized destination recommendations with estimated budget ranges |
+| `POST` | `/api/ai/budget-suggestions` | Category-wise budget allocations aligned with the 8 Expense categories |
+| `POST` | `/api/ai/chat` | Interactive AI Travel Copilot chat with optional conversation history & trip context |
+| `POST` | `/api/ai/optimize-itinerary` | Reorders & refines an existing itinerary for better pacing, routing, or lower cost |
+
+### Configuring `GEMINI_API_KEY`
+1. Create an API key in [Google AI Studio](https://aistudio.google.com/apikey).
+2. Add it to `Backend/.env` (never commit `.env` or expose the key to the frontend):
+   ```env
+   GEMINI_API_KEY=your_actual_gemini_api_key
+   GEMINI_MODEL=gemini-3.8-flash
+   AI_RATE_LIMIT_WINDOW_MS=900000
+   AI_RATE_LIMIT_MAX=20
+   ```
+3. Restart the backend (`npm run dev`).
+
+---
+
+## 🎒 Packing List Management
+
+Base URL: `/api/trips/:tripId/packing-list` (Requires JWT + Trip Access)
+
+| Method | Endpoint | Required Role | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/trips/:tripId/packing-list` | Editor / Admin / Owner | Create packing list or add single/batch items |
+| `GET` | `/api/trips/:tripId/packing-list` | Trip Member / Owner | Get packing list with filters (`category`, `isPacked`, `assignedTo`, `search`) & real-time packing progress |
+| `PATCH` | `/api/trips/:tripId/packing-list/:itemId` | Editor / Admin / Owner | Edit item name, quantity, category, assignment, or toggle `isPacked` |
+| `DELETE` | `/api/trips/:tripId/packing-list/:itemId` | Editor / Admin / Owner | Delete item & recalculate packing progress |
+
+---
+
+## 🌍 Destination Discovery
+
+Base URL: `/api/destinations`
+
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/destinations` | Public | Paginated catalog with filters (`category`, `budgetTier`, `minBudget`, `maxBudget`, `travelType`, `featured`, `sort`) |
+| `GET` | `/api/destinations/search` | Public | Keyword search (`?q=...`) with optional filters & pagination |
+| `GET` | `/api/destinations/:destinationId` | Public | Destination details by MongoDB ObjectId or `slug` |
+
+---
+
+## 🔔 Notifications & Trip Collaboration
+
+### Collaboration Endpoints
+| Method | Endpoint | Access / Role | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/trips/invitations` | Authenticated | List user's trip invitations (`?status=pending\|accepted\|rejected`) |
+| `POST` | `/api/trips/:tripId/members` | Admin / Owner | Invite member (`invitationStatus: 'pending'`) & emit invitation notification |
+| `PATCH` | `/api/trips/:tripId/members/respond` | Invited User | Accept or reject a pending trip invitation (`{ "status": "accepted" \| "rejected" }`) |
+| `PATCH` | `/api/trips/:tripId/members/:memberId/role` | Admin / Owner | Manage member role (`admin`, `editor`, `viewer`) |
+
+### Notification Endpoints
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/notifications` | Authenticated | Paginated notification inbox + `unreadCount` + filters (`isRead`, `type`, `relatedTrip`) & upcoming trip reminders |
+| `PATCH` | `/api/notifications/:notificationId/read` | Authenticated | Mark a single notification as read |
+| `PATCH` | `/api/notifications/read-all` | Authenticated | Mark all unread notifications as read |
+
+### Connecting Expo Push Notifications Later
+Today, notifications are persisted in MongoDB (`channel: 'in_app'`) with `pushDeliveryStatus: 'not_configured'` — push delivery is never faked. To enable real push notifications from React Native / Expo:
+1. **Client (React Native / Expo):** Install `expo-notifications`, request OS permission, obtain the device's `ExponentPushToken[...]`, and register it via a new `POST /api/auth/push-token` endpoint storing `expoPushTokens: [String]` on the `User` model.
+2. **Backend (`notification.service.js`):** Install `expo-server-sdk`, replace `evaluatePushChannelStatus()` with an async dispatcher that validates tokens via `Expo.isExpoPushToken(token)`, chunks messages with `expo.chunkPushNotifications(...)`, sends them to Expo Push Service, and updates `pushDeliveryStatus` (`'sent'` or `'failed'`).
+3. **Receipts & Cleanup:** Poll Expo push receipts asynchronously to prune invalid/uninstalled device tokens (`DeviceNotRegistered`).
+
+---
+
 ## ⚡ Postman API Testing & Collection
 
 A ready-to-import Postman collection is located in:

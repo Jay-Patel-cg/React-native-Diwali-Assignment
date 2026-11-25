@@ -7,12 +7,17 @@ import mongoose from 'mongoose';
 let cached = global.mongoose;
 
 if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null };
+  cached = global.mongoose = {
+    conn: null,
+    promise: null,
+    listenersAttached: false,
+  };
 }
 
 /**
- * Connect to MongoDB Atlas with connection pooling and caching.
- * @returns {Promise<mongoose.Connection>}
+ * Connect to MongoDB Atlas with connection pooling and serverless caching.
+ * Verifies active readyState so stale connections after disconnects are re-established.
+ * @returns {Promise<mongoose.Mongoose>}
  */
 export const connectDB = async () => {
   const uri = process.env.MONGODB_URI;
@@ -21,16 +26,14 @@ export const connectDB = async () => {
     throw new Error('MONGODB_URI is not defined in the environment variables.');
   }
 
-  if (cached.conn) {
+  // Return cached connection only if actively connected
+  if (cached.conn && mongoose.connection.readyState === 1) {
     return cached.conn;
   }
 
-  if (!cached.promise) {
-    const opts = {
-      bufferCommands: false,
-      maxPoolSize: 10,
-      serverSelectionTimeoutMS: 5000,
-    };
+  // Attach lifecycle listeners only once per process
+  if (!cached.listenersAttached) {
+    cached.listenersAttached = true;
 
     mongoose.connection.on('connected', () => {
       console.log('MongoDB connection established successfully.');
@@ -41,8 +44,18 @@ export const connectDB = async () => {
     });
 
     mongoose.connection.on('disconnected', () => {
+      cached.conn = null;
+      cached.promise = null;
       console.warn('MongoDB connection disconnected.');
     });
+  }
+
+  if (!cached.promise) {
+    const opts = {
+      bufferCommands: false,
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+    };
 
     cached.promise = mongoose.connect(uri, opts).then((mongooseInstance) => {
       return mongooseInstance;
@@ -53,6 +66,7 @@ export const connectDB = async () => {
     cached.conn = await cached.promise;
   } catch (error) {
     cached.promise = null;
+    cached.conn = null;
     throw error;
   }
 
@@ -60,4 +74,3 @@ export const connectDB = async () => {
 };
 
 export default connectDB;
-

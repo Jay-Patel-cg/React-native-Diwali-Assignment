@@ -8,14 +8,29 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 import express from 'express';
 import cors from 'cors';
+import mongoose from 'mongoose';
 import routes from './routes/index.js';
+import { connectDB } from './config/db.js';
 import { notFound } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { ApiError } from './utils/ApiError.js';
+import { ApiResponse } from './utils/ApiResponse.js';
 
 const app = express();
 
 // ==========================================
-// 1. CORS Configuration
+// 1. Defensive Security Headers
+// ==========================================
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
+
+// ==========================================
+// 2. CORS Configuration
 // ==========================================
 const parseAllowedOrigins = () => {
   if (!process.env.CLIENT_URL) {
@@ -39,7 +54,7 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    return callback(new Error(`CORS origin '${origin}' not allowed.`));
+    return callback(new ApiError(403, `CORS origin '${origin}' is not allowed.`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -49,30 +64,62 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // ==========================================
-// 2. Request Parsing Middleware
+// 3. Request Parsing Middleware
 // ==========================================
-app.use(express.json({ limit: '16kb' }));
-app.use(express.urlencoded({ extended: true, limit: '16kb' }));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 // ==========================================
-// 3. Welcome / Root Endpoint
+// 4. Welcome / Root Endpoint
 // ==========================================
 app.get('/', (req, res) => {
-  res.status(200).json({
-    name: 'Samundar Ke Sath API',
-    version: '1.0.0',
-    description: 'Production-ready REST API for Samundar Ke Sath Travel App',
-    healthCheck: '/api/health',
-  });
+  res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        name: 'Samundar Ke Sath API',
+        version: '1.0.0',
+        description: 'Production-ready REST API for Samundar Ke Sath Travel App',
+        healthCheck: '/api/health',
+      },
+      'Welcome to Samundar Ke Sath API'
+    )
+  );
 });
 
 // ==========================================
-// 4. API Routes
+// 5. Serverless-Safe Database Connection Guard
+// Ensures MongoDB is connected on Vercel cold starts before hitting DB routes
+// ==========================================
+app.use('/api', async (req, res, next) => {
+  if (req.path === '/health') {
+    return next();
+  }
+
+  if (mongoose.connection.readyState === 1) {
+    return next();
+  }
+
+  try {
+    await connectDB();
+    return next();
+  } catch (err) {
+    return next(
+      new ApiError(
+        503,
+        'Database service is currently unavailable. Please try again shortly.'
+      )
+    );
+  }
+});
+
+// ==========================================
+// 6. API Routes
 // ==========================================
 app.use('/api', routes);
 
 // ==========================================
-// 5. Error Handlers
+// 7. Error Handlers
 // ==========================================
 // Handle unmapped routes (404)
 app.use(notFound);

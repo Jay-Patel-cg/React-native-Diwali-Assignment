@@ -35,13 +35,15 @@ const startServer = async () => {
       );
     }
 
-    // Launch HTTP listener
-    const server = app.listen(PORT, () => {
+    // Launch HTTP listener (0.0.0.0 binds to all network interfaces for mobile testing)
+    const server = app.listen(PORT, '0.0.0.0', () => {
       console.log('========================================================');
       console.log(`  Samundar Ke Sath Backend API`);
       console.log(`  Status      : Running`);
       console.log(`  Port        : ${PORT}`);
       console.log(`  Environment : ${process.env.NODE_ENV || 'development'}`);
+      console.log(`  Local URL   : http://localhost:${PORT}/api`);
+      console.log(`  LAN URL     : http://0.0.0.0:${PORT}/api`);
       console.log(`  Health Check: http://localhost:${PORT}/api/health`);
       console.log('========================================================');
     });
