@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "Samundar Ke Sath",
+    "slug": "samundar-ke-sath",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "samundar-ke-sath",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.samundarkesath.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0B4F6C"
+      },
+      "package": "com.samundarkesath.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-status-bar",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Samundar Ke Sath to access your photos so you can set your profile picture.",
+          "cameraPermission": "Allow Samundar Ke Sath to use your camera to take a profile picture."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
