@@ -5,8 +5,18 @@ import Expense from './Expense.js';
 import TripMember from './TripMember.js';
 import PackingList from './PackingList.js';
 import Notification from './Notification.js';
+import Destination from './Destination.js';
 
-export { User, Trip, Itinerary, Expense, TripMember, PackingList, Notification };
+export {
+  User,
+  Trip,
+  Itinerary,
+  Expense,
+  TripMember,
+  PackingList,
+  Notification,
+  Destination,
+};
 
 export default {
   User,
@@ -16,4 +26,5 @@ export default {
   TripMember,
   PackingList,
   Notification,
+  Destination,
 };

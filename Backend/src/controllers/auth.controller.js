@@ -8,6 +8,23 @@ import {
   sanitizeUser,
 } from '../services/auth.service.js';
 
+const ALLOWED_PREFERENCE_FIELDS = [
+  'preferredCurrency',
+  'travelStyle',
+  'dietaryRestrictions',
+  'language',
+  'notificationsEnabled',
+];
+
+const pickPreferences = (raw = {}) => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const result = {};
+  for (const key of ALLOWED_PREFERENCE_FIELDS) {
+    if (raw[key] !== undefined) result[key] = raw[key];
+  }
+  return result;
+};
+
 /**
  * @desc    Register a new user with email and password
  * @route   POST /api/auth/register
@@ -32,7 +49,7 @@ export const register = asyncHandler(async (req, res) => {
     name: name.trim(),
     email: normalizedEmail,
     password,
-    preferences: preferences || {},
+    preferences: pickPreferences(preferences),
   });
 
   const token = generateToken(newUser._id);
@@ -179,8 +196,8 @@ export const updateProfile = asyncHandler(async (req, res) => {
   if (profileImage !== undefined) user.profileImage = profileImage;
   if (preferences !== undefined) {
     user.preferences = {
-      ...user.preferences?.toObject(),
-      ...preferences,
+      ...(user.preferences?.toObject ? user.preferences.toObject() : {}),
+      ...pickPreferences(preferences),
     };
   }
 

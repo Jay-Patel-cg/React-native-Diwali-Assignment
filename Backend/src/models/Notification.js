@@ -1,5 +1,19 @@
 import mongoose from 'mongoose';
 
+export const NOTIFICATION_TYPES = [
+  'trip_invitation',
+  'invitation_response',
+  'role_updated',
+  'trip_reminder',
+  'trip_update',
+  'expense_added',
+  'expense_updated',
+  'expense_settled',
+  'itinerary_update',
+  'packing_list_update',
+  'system',
+];
+
 const notificationSchema = new mongoose.Schema(
   {
     userId: {
@@ -23,14 +37,7 @@ const notificationSchema = new mongoose.Schema(
     type: {
       type: String,
       enum: {
-        values: [
-          'trip_invitation',
-          'trip_update',
-          'expense_added',
-          'expense_settled',
-          'itinerary_update',
-          'system',
-        ],
+        values: NOTIFICATION_TYPES,
         message: '{VALUE} is not a valid notification type',
       },
       default: 'system',
@@ -41,10 +48,29 @@ const notificationSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
+    readAt: {
+      type: Date,
+      default: null,
+    },
     relatedTrip: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Trip',
       default: null,
+      index: true,
+    },
+    channel: {
+      type: String,
+      enum: ['in_app'],
+      default: 'in_app',
+    },
+    pushDeliveryStatus: {
+      type: String,
+      enum: ['not_configured', 'skipped', 'queued', 'sent', 'failed'],
+      default: 'not_configured',
+    },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
   },
   {
@@ -52,9 +78,9 @@ const notificationSchema = new mongoose.Schema(
   }
 );
 
-// Compound index for fast queries: fetching unread notifications by user, newest first
+// Compound indexes for high-throughput notification inbox and unread badge queries
 notificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 });
+notificationSchema.index({ userId: 1, type: 1, createdAt: -1 });
 
 export const Notification = mongoose.model('Notification', notificationSchema);
 export default Notification;
-

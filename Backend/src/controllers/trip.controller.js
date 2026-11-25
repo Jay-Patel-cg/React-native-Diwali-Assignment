@@ -71,11 +71,70 @@ export const addTripMember = asyncHandler(async (req, res) => {
   const newMember = await tripService.addTripMember(
     req.params.tripId,
     req.user._id,
-    req.body
+    req.body,
+    req.user.name
   );
   res
     .status(201)
-    .json(new ApiResponse(201, newMember, 'Member added to trip successfully'));
+    .json(
+      new ApiResponse(201, newMember, 'Trip invitation sent to user successfully')
+    );
+});
+
+/**
+ * @desc    Get trip invitations for the logged-in user
+ * @route   GET /api/trips/invitations
+ * @access  Private
+ */
+export const getUserInvitations = asyncHandler(async (req, res) => {
+  const result = await tripService.getUserInvitations(req.user._id, req.query);
+  res
+    .status(200)
+    .json(
+      new ApiResponse(200, result, 'Trip invitations retrieved successfully')
+    );
+});
+
+/**
+ * @desc    Accept or reject a pending trip invitation
+ * @route   PATCH /api/trips/:tripId/members/respond
+ * @access  Private (Invited User)
+ */
+export const respondToInvitation = asyncHandler(async (req, res) => {
+  const membership = await tripService.respondToInvitation(
+    req.params.tripId,
+    req.user._id,
+    req.user.name,
+    req.body.status
+  );
+  res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        membership,
+        `Trip invitation ${req.body.status} successfully`
+      )
+    );
+});
+
+/**
+ * @desc    Update a trip member's role
+ * @route   PATCH /api/trips/:tripId/members/:memberId/role
+ * @access  Private (Owner / Admin)
+ */
+export const updateMemberRole = asyncHandler(async (req, res) => {
+  const updatedMember = await tripService.updateMemberRole(
+    req.params.tripId,
+    req.params.memberId,
+    req.tripRole,
+    req.body.role
+  );
+  res
+    .status(200)
+    .json(
+      new ApiResponse(200, updatedMember, 'Member role updated successfully')
+    );
 });
 
 /**
@@ -115,7 +174,8 @@ export const removeTripMember = asyncHandler(async (req, res) => {
 export const createItinerary = asyncHandler(async (req, res) => {
   const itinerary = await tripService.createItinerary(
     req.params.tripId,
-    req.body
+    req.body,
+    req.user
   );
   res
     .status(201)
@@ -143,7 +203,8 @@ export const updateItinerary = asyncHandler(async (req, res) => {
   const updatedItinerary = await tripService.updateItinerary(
     req.params.tripId,
     req.params.itineraryId,
-    req.body
+    req.body,
+    req.user
   );
   res
     .status(200)
@@ -172,6 +233,9 @@ export default {
   updateTrip,
   deleteTrip,
   addTripMember,
+  getUserInvitations,
+  respondToInvitation,
+  updateMemberRole,
   getTripMembers,
   removeTripMember,
   createItinerary,

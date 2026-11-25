@@ -8,12 +8,20 @@ import { ApiError } from '../utils/ApiError.js';
 export const errorHandler = (err, req, res, next) => {
   let error = err;
 
-  // Convert non-ApiError instances to ApiError
-  if (!(error instanceof ApiError)) {
-    const statusCode =
-      error.statusCode || (error.name === 'ValidationError' ? 400 : 500);
-    const message = error.message || 'Internal Server Error';
-    error = new ApiError(statusCode, message, error?.errors || [], err.stack);
+  // Handle malformed JSON request body from express.json()
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    error = new ApiError(
+      400,
+      'Malformed JSON in request body. Please check your request syntax.'
+    );
+  }
+
+  // Handle oversized request payloads
+  if (err.type === 'entity.too.large' || err.status === 413) {
+    error = new ApiError(
+      413,
+      'Request payload exceeds the maximum allowed size.'
+    );
   }
 
   // Handle Mongoose Bad ObjectId (CastError)
@@ -36,16 +44,39 @@ export const errorHandler = (err, req, res, next) => {
     error = new ApiError(400, message, messages);
   }
 
+  // Handle MongoDB connectivity / server selection failures gracefully
+  if (
+    err.name === 'MongoNetworkError' ||
+    err.name === 'MongoServerSelectionError' ||
+    err.name === 'MongooseServerSelectionError' ||
+    (typeof err.message === 'string' &&
+      err.message.includes('Client must be connected before running operations'))
+  ) {
+    error = new ApiError(
+      503,
+      'Database service is temporarily unavailable. Please try again shortly.'
+    );
+  }
+
   // Handle JWT Malformed / Invalid
   if (err.name === 'JsonWebTokenError') {
-    const message = 'Invalid authentication token. Please log in again.';
-    error = new ApiError(401, message);
+    error = new ApiError(401, 'Invalid authentication token. Please log in again.');
   }
 
   // Handle JWT Expired
   if (err.name === 'TokenExpiredError') {
-    const message = 'Authentication token has expired. Please log in again.';
-    error = new ApiError(401, message);
+    error = new ApiError(401, 'Authentication token has expired. Please log in again.');
+  }
+
+  // Convert remaining non-ApiError instances to ApiError
+  if (!(error instanceof ApiError)) {
+    const statusCode = error.statusCode || error.status || 500;
+    const isProd = process.env.NODE_ENV === 'production';
+    const message =
+      statusCode >= 500 && isProd
+        ? 'Internal Server Error'
+        : error.message || 'Internal Server Error';
+    error = new ApiError(statusCode, message, error?.errors || [], err.stack);
   }
 
   const response = {
@@ -60,4 +91,3 @@ export const errorHandler = (err, req, res, next) => {
 };
 
 export default errorHandler;
-

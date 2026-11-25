@@ -11,7 +11,8 @@ export const createExpense = asyncHandler(async (req, res) => {
   const expense = await expenseService.createExpense(
     req.params.tripId,
     req.user._id,
-    req.body
+    req.body,
+    req.user.name
   );
   res
     .status(201)
@@ -59,7 +60,8 @@ export const updateExpense = asyncHandler(async (req, res) => {
     req.params.expenseId,
     req.user._id.toString(),
     req.tripRole,
-    req.body
+    req.body,
+    req.user.name
   );
   res
     .status(200)

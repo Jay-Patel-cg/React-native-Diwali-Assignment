@@ -1,6 +1,6 @@
 import { ApiError } from '../utils/ApiError.js';
 
-const EMAIL_REGEX = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /**
  * Validate user registration request body
@@ -84,8 +84,12 @@ export const validateProfileUpdate = (req, res, next) => {
     }
   }
 
-  if (profileImage !== undefined && typeof profileImage !== 'string') {
-    errors.push('Profile image must be a valid string URL');
+  if (profileImage !== undefined) {
+    if (typeof profileImage !== 'string') {
+      errors.push('Profile image must be a valid image URL or base64 data URI');
+    } else if (profileImage.length > 1500000) {
+      errors.push('Profile image is too large. Please choose a smaller photo.');
+    }
   }
 
   if (preferences !== undefined && (typeof preferences !== 'object' || preferences === null)) {

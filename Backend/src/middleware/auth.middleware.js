@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import { User } from '../models/User.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -38,6 +39,10 @@ export const protect = asyncHandler(async (req, res, next) => {
       throw new ApiError(401, 'Session expired. Please log in again.');
     }
     throw new ApiError(401, 'Invalid authentication token.');
+  }
+
+  if (!decoded?.id || !mongoose.Types.ObjectId.isValid(decoded.id)) {
+    throw new ApiError(401, 'Invalid authentication token payload.');
   }
 
   // Retrieve user associated with token

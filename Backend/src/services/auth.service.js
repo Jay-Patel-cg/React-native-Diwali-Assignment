@@ -41,12 +41,27 @@ export const generateToken = (userId) => {
  */
 export const verifyGoogleIdToken = async (idToken) => {
   try {
+    const rawClientIds = process.env.GOOGLE_CLIENT_ID?.trim();
+    if (
+      !rawClientIds ||
+      rawClientIds === 'your_google_client_id.apps.googleusercontent.com'
+    ) {
+      throw new ApiError(
+        503,
+        'Google Sign-In is not configured on the server. Please set a valid GOOGLE_CLIENT_ID.'
+      );
+    }
+
+    const allowedAudiences = rawClientIds
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+
     const client = getGoogleClient();
-    const audience = process.env.GOOGLE_CLIENT_ID;
 
     const ticket = await client.verifyIdToken({
       idToken,
-      audience: audience && audience !== 'your_google_client_id.apps.googleusercontent.com' ? audience : undefined,
+      audience: allowedAudiences.length === 1 ? allowedAudiences[0] : allowedAudiences,
     });
 
     const payload = ticket.getPayload();

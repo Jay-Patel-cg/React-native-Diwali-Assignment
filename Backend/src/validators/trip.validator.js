@@ -228,10 +228,66 @@ export const validateUpdateItinerary = (req, res, next) => {
   next();
 };
 
+/**
+ * Validates PATCH /api/trips/:tripId/members/respond
+ */
+export const validateInvitationResponse = (req, res, next) => {
+  const raw = req.body?.status || req.body?.action;
+  if (!raw || typeof raw !== 'string') {
+    return next(
+      new ApiError(400, 'status (accepted or rejected) is required')
+    );
+  }
+
+  const normalized = raw.toLowerCase().trim();
+  const mapped =
+    normalized === 'accept'
+      ? 'accepted'
+      : normalized === 'reject'
+        ? 'rejected'
+        : normalized;
+
+  if (mapped !== 'accepted' && mapped !== 'rejected') {
+    return next(
+      new ApiError(400, 'Invitation status must be either "accepted" or "rejected"')
+    );
+  }
+
+  req.body.status = mapped;
+  next();
+};
+
+/**
+ * Validates PATCH /api/trips/:tripId/members/:memberId/role
+ */
+export const validateUpdateMemberRole = (req, res, next) => {
+  const { memberId } = req.params;
+  const { role } = req.body || {};
+  const errors = [];
+
+  if (!memberId || !mongoose.Types.ObjectId.isValid(memberId)) {
+    errors.push('Invalid memberId format');
+  }
+
+  if (!role || !VALID_MEMBER_ROLES.includes(String(role).toLowerCase().trim())) {
+    errors.push(`role is required and must be one of: ${VALID_MEMBER_ROLES.join(', ')}`);
+  } else {
+    req.body.role = String(role).toLowerCase().trim();
+  }
+
+  if (errors.length > 0) {
+    return next(new ApiError(400, errors[0], errors));
+  }
+
+  next();
+};
+
 export default {
   validateCreateTrip,
   validateUpdateTrip,
   validateAddMember,
+  validateInvitationResponse,
+  validateUpdateMemberRole,
   validateItinerary,
   validateUpdateItinerary,
 };

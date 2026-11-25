@@ -4,6 +4,12 @@ import { Trip } from '../models/Trip.js';
 import { TripMember } from '../models/TripMember.js';
 import { User } from '../models/User.js';
 import { ApiError } from '../utils/ApiError.js';
+import {
+  escapeRegex,
+  parsePagination,
+  buildPaginationMeta,
+} from '../utils/queryHelpers.js';
+import * as notificationService from './notification.service.js';
 
 /**
  * Helper to round decimals to 2 decimal places with mathematical precision
@@ -11,32 +17,73 @@ import { ApiError } from '../utils/ApiError.js';
 const round2 = (num) => Math.round((Number(num) + Number.EPSILON) * 100) / 100;
 
 /**
- * Resolves and calculates participant split shares
+ * Returns the Set of accepted member user IDs (always including the trip owner).
  */
-const calculateParticipantShares = async (tripId, totalAmount, splitType = 'equal', providedParticipants = []) => {
+const getValidTripMemberIdSet = async (trip) => {
+  const members = await TripMember.find({
+    tripId: trip._id,
+    invitationStatus: 'accepted',
+  }).select('userId');
+
+  const idSet = new Set([trip.owner.toString()]);
+  members.forEach((m) => idSet.add(m.userId.toString()));
+  return idSet;
+};
+
+/**
+ * Resolves, validates trip membership & uniqueness, and calculates exact participant split shares
+ * with cent-accurate reconciliation so sum(shareAmount) === totalAmount always.
+ */
+const calculateParticipantShares = async (
+  trip,
+  totalAmount,
+  splitType = 'equal',
+  providedParticipants = [],
+  validMemberIds = null
+) => {
   const roundedAmount = round2(totalAmount);
+  const allowedIds = validMemberIds || (await getValidTripMemberIdSet(trip));
+
+  // Validate provided participants belong to this trip and have no duplicate userIds
+  if (Array.isArray(providedParticipants) && providedParticipants.length > 0) {
+    const seen = new Set();
+    for (const p of providedParticipants) {
+      const uid = p.userId.toString();
+      if (!allowedIds.has(uid)) {
+        throw new ApiError(
+          400,
+          `Participant '${uid}' is not an active member of this trip.`
+        );
+      }
+      if (seen.has(uid)) {
+        throw new ApiError(
+          400,
+          'Duplicate participant detected in expense split.'
+        );
+      }
+      seen.add(uid);
+    }
+  }
 
   if (splitType === 'equal') {
-    let participantUserIds = [];
-
-    if (providedParticipants && providedParticipants.length > 0) {
-      participantUserIds = providedParticipants.map((p) => p.userId.toString());
-    } else {
-      // Default to all accepted members of the trip including the owner
-      const members = await TripMember.find({ tripId, invitationStatus: 'accepted' }).select('userId');
-      participantUserIds = members.map((m) => m.userId.toString());
-    }
+    const participantUserIds =
+      providedParticipants && providedParticipants.length > 0
+        ? providedParticipants.map((p) => p.userId.toString())
+        : Array.from(allowedIds);
 
     if (participantUserIds.length === 0) {
-      throw new ApiError(400, 'At least one participant is required to split the expense');
+      throw new ApiError(
+        400,
+        'At least one participant is required to split the expense'
+      );
     }
 
     const n = participantUserIds.length;
     const baseShare = Math.floor((roundedAmount / n) * 100) / 100;
-    let distributed = round2(baseShare * n);
+    const distributed = round2(baseShare * n);
     let remainderCents = Math.round((roundedAmount - distributed) * 100);
 
-    return participantUserIds.map((userId, idx) => {
+    return participantUserIds.map((userId) => {
       let share = baseShare;
       if (remainderCents > 0) {
         share = round2(share + 0.01);
@@ -52,7 +99,10 @@ const calculateParticipantShares = async (tripId, totalAmount, splitType = 'equa
 
   if (splitType === 'exact') {
     if (!providedParticipants || providedParticipants.length === 0) {
-      throw new ApiError(400, 'Participants list with shareAmount is required for exact split');
+      throw new ApiError(
+        400,
+        'Participants list with shareAmount is required for exact split'
+      );
     }
 
     let sumShares = 0;
@@ -66,7 +116,7 @@ const calculateParticipantShares = async (tripId, totalAmount, splitType = 'equa
       };
     });
 
-    if (Math.abs(sumShares - roundedAmount) > 0.05) {
+    if (Math.abs(sumShares - roundedAmount) > 0.01) {
       throw new ApiError(
         400,
         `Sum of participant shares (${sumShares}) must match the total expense amount (${roundedAmount})`
@@ -78,7 +128,10 @@ const calculateParticipantShares = async (tripId, totalAmount, splitType = 'equa
 
   if (splitType === 'percentage') {
     if (!providedParticipants || providedParticipants.length === 0) {
-      throw new ApiError(400, 'Participants list with percentage is required for percentage split');
+      throw new ApiError(
+        400,
+        'Participants list with percentage is required for percentage split'
+      );
     }
 
     let sumPercentage = 0;
@@ -86,15 +139,23 @@ const calculateParticipantShares = async (tripId, totalAmount, splitType = 'equa
       sumPercentage = round2(sumPercentage + Number(p.percentage || 0));
     });
 
-    if (Math.abs(sumPercentage - 100) > 0.5) {
-      throw new ApiError(400, `Sum of participant percentages must equal 100% (Got: ${sumPercentage}%)`);
+    if (Math.abs(sumPercentage - 100) > 0.05) {
+      throw new ApiError(
+        400,
+        `Sum of participant percentages must equal 100% (Got: ${sumPercentage}%)`
+      );
     }
 
-    return providedParticipants.map((p) => {
-      const share = round2(((Number(p.percentage) || 0) / 100) * roundedAmount);
+    let runningSum = 0;
+    return providedParticipants.map((p, idx) => {
+      const isLast = idx === providedParticipants.length - 1;
+      const share = isLast
+        ? round2(roundedAmount - runningSum)
+        : round2(((Number(p.percentage) || 0) / 100) * roundedAmount);
+      runningSum = round2(runningSum + share);
       return {
         userId: p.userId,
-        shareAmount: share,
+        shareAmount: Math.max(0, share),
         hasPaid: Boolean(p.hasPaid),
       };
     });
@@ -106,28 +167,54 @@ const calculateParticipantShares = async (tripId, totalAmount, splitType = 'equa
 /**
  * Create a new expense for a trip
  */
-export const createExpense = async (tripId, requesterId, expenseData) => {
+export const createExpense = async (
+  tripId,
+  requesterId,
+  expenseData,
+  requesterName = ''
+) => {
   const trip = await Trip.findById(tripId);
   if (!trip) {
     throw new ApiError(404, 'Trip not found');
   }
 
-  const payerId = expenseData.paidBy || requesterId;
+  const tripCurrency = (trip.currency || 'INR').toUpperCase();
+  const requestedCurrency = expenseData.currency
+    ? String(expenseData.currency).toUpperCase().trim()
+    : tripCurrency;
+
+  if (requestedCurrency !== tripCurrency) {
+    throw new ApiError(
+      400,
+      `Expense currency '${requestedCurrency}' does not match trip currency '${tripCurrency}'.`
+    );
+  }
+
+  const validMemberIds = await getValidTripMemberIdSet(trip);
+  const payerId = (expenseData.paidBy || requesterId).toString();
+
+  if (!validMemberIds.has(payerId)) {
+    throw new ApiError(
+      400,
+      'The specified payer (paidBy) is not an active member of this trip.'
+    );
+  }
+
   const numAmount = round2(expenseData.amount);
-  const currency = (expenseData.currency || trip.currency || 'INR').toUpperCase();
   const splitType = expenseData.splitType || 'equal';
 
   // Calculate participants and individual split shares
   const participants = await calculateParticipantShares(
-    tripId,
+    trip,
     numAmount,
     splitType,
-    expenseData.participants
+    expenseData.participants,
+    validMemberIds
   );
 
   // Mark payer's own share as settled/paid
   participants.forEach((p) => {
-    if (p.userId.toString() === payerId.toString()) {
+    if (p.userId.toString() === payerId) {
       p.hasPaid = true;
     }
   });
@@ -137,13 +224,26 @@ export const createExpense = async (tripId, requesterId, expenseData) => {
     paidBy: payerId,
     title: expenseData.title.trim(),
     amount: numAmount,
-    currency,
+    currency: tripCurrency,
     category: expenseData.category || 'miscellaneous',
-    expenseDate: expenseData.expenseDate ? new Date(expenseData.expenseDate) : new Date(),
+    expenseDate: expenseData.expenseDate
+      ? new Date(expenseData.expenseDate)
+      : new Date(),
     notes: expenseData.notes ? expenseData.notes.trim() : '',
     splitType,
     participants,
     receiptImage: expenseData.receiptImage || '',
+  });
+
+  await notificationService.sendExpenseUpdateNotification({
+    tripId,
+    tripTitle: trip.title,
+    actorId: requesterId,
+    actorName: requesterName,
+    expenseTitle: expense.title,
+    amount: numAmount,
+    currency: tripCurrency,
+    action: 'added',
   });
 
   return Expense.findById(expense._id)
@@ -155,20 +255,13 @@ export const createExpense = async (tripId, requesterId, expenseData) => {
  * Retrieve paginated and filtered expenses for a trip
  */
 export const getTripExpenses = async (tripId, queryParams = {}) => {
-  const {
-    page = 1,
-    limit = 20,
-    category,
-    paidBy,
-    startDate,
-    endDate,
-    search,
-    sort = 'desc',
-  } = queryParams;
+  const { category, paidBy, startDate, endDate, search, sort = 'desc' } =
+    queryParams;
 
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10)));
-  const skip = (pageNum - 1) * limitNum;
+  const { page, limit, skip } = parsePagination(queryParams, {
+    defaultLimit: 20,
+    maxLimit: 100,
+  });
 
   const filter = { tripId };
 
@@ -190,8 +283,8 @@ export const getTripExpenses = async (tripId, queryParams = {}) => {
     }
   }
 
-  if (search && search.trim().length > 0) {
-    const searchRegex = new RegExp(search.trim(), 'i');
+  if (search && String(search).trim().length > 0) {
+    const searchRegex = new RegExp(escapeRegex(String(search).trim()), 'i');
     filter.$or = [{ title: searchRegex }, { notes: searchRegex }];
   }
 
@@ -204,7 +297,7 @@ export const getTripExpenses = async (tripId, queryParams = {}) => {
       .populate('participants.userId', 'name email profileImage')
       .sort(sortOption)
       .skip(skip)
-      .limit(limitNum),
+      .limit(limit),
     Expense.countDocuments(filter),
     Expense.aggregate([
       { $match: { tripId: new mongoose.Types.ObjectId(tripId) } },
@@ -212,20 +305,13 @@ export const getTripExpenses = async (tripId, queryParams = {}) => {
     ]),
   ]);
 
-  const totalPages = Math.ceil(total / limitNum) || 1;
-  const tripTotalExpenditure = aggregateTotal.length > 0 ? round2(aggregateTotal[0].totalSum) : 0;
+  const tripTotalExpenditure =
+    aggregateTotal.length > 0 ? round2(aggregateTotal[0].totalSum) : 0;
 
   return {
     expenses,
     tripTotalExpenditure,
-    pagination: {
-      total,
-      page: pageNum,
-      limit: limitNum,
-      totalPages,
-      hasNextPage: pageNum < totalPages,
-      hasPrevPage: pageNum > 1,
-    },
+    pagination: buildPaginationMeta(total, page, limit),
   };
 };
 
@@ -233,6 +319,10 @@ export const getTripExpenses = async (tripId, queryParams = {}) => {
  * Retrieve a single expense by ID
  */
 export const getExpenseById = async (tripId, expenseId) => {
+  if (!mongoose.Types.ObjectId.isValid(expenseId)) {
+    throw new ApiError(400, 'Invalid expense ID format');
+  }
+
   const expense = await Expense.findOne({ _id: expenseId, tripId })
     .populate('paidBy', 'name email profileImage')
     .populate('participants.userId', 'name email profileImage');
@@ -247,10 +337,28 @@ export const getExpenseById = async (tripId, expenseId) => {
 /**
  * Update an existing expense
  */
-export const updateExpense = async (tripId, expenseId, requesterId, requesterRole, updateData) => {
-  const expense = await Expense.findOne({ _id: expenseId, tripId });
+export const updateExpense = async (
+  tripId,
+  expenseId,
+  requesterId,
+  requesterRole,
+  updateData,
+  requesterName = ''
+) => {
+  if (!mongoose.Types.ObjectId.isValid(expenseId)) {
+    throw new ApiError(400, 'Invalid expense ID format');
+  }
+
+  const [expense, trip] = await Promise.all([
+    Expense.findOne({ _id: expenseId, tripId }),
+    Trip.findById(tripId),
+  ]);
+
   if (!expense) {
     throw new ApiError(404, 'Expense not found');
+  }
+  if (!trip) {
+    throw new ApiError(404, 'Trip not found');
   }
 
   const isPayer = expense.paidBy.toString() === requesterId.toString();
@@ -263,26 +371,46 @@ export const updateExpense = async (tripId, expenseId, requesterId, requesterRol
     );
   }
 
-  const newAmount = updateData.amount !== undefined ? round2(updateData.amount) : expense.amount;
+  const tripCurrency = (trip.currency || 'INR').toUpperCase();
+  if (
+    updateData.currency &&
+    String(updateData.currency).toUpperCase().trim() !== tripCurrency
+  ) {
+    throw new ApiError(
+      400,
+      `Expense currency '${updateData.currency}' does not match trip currency '${tripCurrency}'.`
+    );
+  }
+
+  const validMemberIds = await getValidTripMemberIdSet(trip);
+  if (updateData.paidBy && !validMemberIds.has(updateData.paidBy.toString())) {
+    throw new ApiError(
+      400,
+      'The specified payer (paidBy) is not an active member of this trip.'
+    );
+  }
+
+  const newAmount =
+    updateData.amount !== undefined ? round2(updateData.amount) : expense.amount;
   const newSplitType = updateData.splitType || expense.splitType;
   const newParticipants = updateData.participants || expense.participants;
 
-  // If amount, splitType, or participants changed, recalculate participant shares
   if (
     updateData.amount !== undefined ||
     updateData.splitType !== undefined ||
     updateData.participants !== undefined
   ) {
     const updatedParticipants = await calculateParticipantShares(
-      tripId,
+      trip,
       newAmount,
       newSplitType,
-      newParticipants
+      newParticipants,
+      validMemberIds
     );
 
-    const payer = updateData.paidBy || expense.paidBy;
+    const payer = (updateData.paidBy || expense.paidBy).toString();
     updatedParticipants.forEach((p) => {
-      if (p.userId.toString() === payer.toString()) {
+      if (p.userId.toString() === payer) {
         p.hasPaid = true;
       }
     });
@@ -297,9 +425,22 @@ export const updateExpense = async (tripId, expenseId, requesterId, requesterRol
   if (updateData.expenseDate) expense.expenseDate = new Date(updateData.expenseDate);
   if (updateData.notes !== undefined) expense.notes = updateData.notes.trim();
   if (updateData.paidBy) expense.paidBy = updateData.paidBy;
-  if (updateData.receiptImage !== undefined) expense.receiptImage = updateData.receiptImage;
+  if (updateData.receiptImage !== undefined) {
+    expense.receiptImage = updateData.receiptImage;
+  }
 
   await expense.save();
+
+  await notificationService.sendExpenseUpdateNotification({
+    tripId,
+    tripTitle: trip.title,
+    actorId: requesterId,
+    actorName: requesterName,
+    expenseTitle: expense.title,
+    amount: expense.amount,
+    currency: expense.currency,
+    action: 'updated',
+  });
 
   return Expense.findById(expense._id)
     .populate('paidBy', 'name email profileImage')
@@ -309,7 +450,16 @@ export const updateExpense = async (tripId, expenseId, requesterId, requesterRol
 /**
  * Delete an expense
  */
-export const deleteExpense = async (tripId, expenseId, requesterId, requesterRole) => {
+export const deleteExpense = async (
+  tripId,
+  expenseId,
+  requesterId,
+  requesterRole
+) => {
+  if (!mongoose.Types.ObjectId.isValid(expenseId)) {
+    throw new ApiError(400, 'Invalid expense ID format');
+  }
+
   const expense = await Expense.findOne({ _id: expenseId, tripId });
   if (!expense) {
     throw new ApiError(404, 'Expense not found');
@@ -354,7 +504,8 @@ export const getTripBudgetTracking = async (tripId) => {
   const transactionCount = stats.length > 0 ? stats[0].totalTransactions : 0;
   const totalBudget = trip.budget || 0;
   const budgetRemaining = round2(totalBudget - totalSpent);
-  const percentageSpent = totalBudget > 0 ? round2((totalSpent / totalBudget) * 100) : 0;
+  const percentageSpent =
+    totalBudget > 0 ? round2((totalSpent / totalBudget) * 100) : 0;
   const isOverBudget = totalSpent > totalBudget && totalBudget > 0;
 
   return {
@@ -371,7 +522,7 @@ export const getTripBudgetTracking = async (tripId) => {
 };
 
 /**
- * Detailed Expense Analytics & Category-wise Breakdown
+ * Detailed Expense Analytics & Category-wise Breakdown (batch user lookup — no N+1)
  */
 export const getExpenseAnalytics = async (tripId) => {
   const trip = await Trip.findById(tripId).select('budget currency');
@@ -379,17 +530,30 @@ export const getExpenseAnalytics = async (tripId) => {
     throw new ApiError(404, 'Trip not found');
   }
 
-  // 1. Category-wise Aggregation
-  const categoryAggregation = await Expense.aggregate([
-    { $match: { tripId: new mongoose.Types.ObjectId(tripId) } },
-    {
-      $group: {
-        _id: '$category',
-        totalAmount: { $sum: '$amount' },
-        transactionCount: { $sum: 1 },
+  const tripObjectId = new mongoose.Types.ObjectId(tripId);
+
+  const [categoryAggregation, paidByAggregation] = await Promise.all([
+    Expense.aggregate([
+      { $match: { tripId: tripObjectId } },
+      {
+        $group: {
+          _id: '$category',
+          totalAmount: { $sum: '$amount' },
+          transactionCount: { $sum: 1 },
+        },
       },
-    },
-    { $sort: { totalAmount: -1 } },
+      { $sort: { totalAmount: -1 } },
+    ]),
+    Expense.aggregate([
+      { $match: { tripId: tripObjectId } },
+      {
+        $group: {
+          _id: '$paidBy',
+          totalPaid: { $sum: '$amount' },
+          paidCount: { $sum: 1 },
+        },
+      },
+    ]),
   ]);
 
   const totalExpenses = round2(
@@ -400,51 +564,44 @@ export const getExpenseAnalytics = async (tripId) => {
     category: cat._id,
     totalAmount: round2(cat.totalAmount),
     transactionCount: cat.transactionCount,
-    percentageOfTotal: totalExpenses > 0 ? round2((cat.totalAmount / totalExpenses) * 100) : 0,
+    percentageOfTotal:
+      totalExpenses > 0 ? round2((cat.totalAmount / totalExpenses) * 100) : 0,
   }));
 
-  // 2. Spending per person (who paid what)
-  const paidByAggregation = await Expense.aggregate([
-    { $match: { tripId: new mongoose.Types.ObjectId(tripId) } },
-    {
-      $group: {
-        _id: '$paidBy',
-        totalPaid: { $sum: '$amount' },
-        paidCount: { $sum: 1 },
-      },
-    },
-  ]);
+  // Single batch query to resolve all payers (fixes N+1)
+  const payerIds = paidByAggregation.map((item) => item._id);
+  const payerUsers =
+    payerIds.length > 0
+      ? await User.find({ _id: { $in: payerIds } })
+          .select('name email profileImage')
+          .lean()
+      : [];
 
-  // Populate user details for paidBy
-  const paidByUserMap = {};
-  for (const item of paidByAggregation) {
-    const user = await User.findById(item._id).select('name email profileImage');
-    paidByUserMap[item._id.toString()] = {
-      user: user || { _id: item._id, name: 'Unknown User' },
+  const userLookup = new Map(payerUsers.map((u) => [u._id.toString(), u]));
+
+  const payerStatistics = paidByAggregation.map((item) => {
+    const uid = item._id.toString();
+    return {
+      user: userLookup.get(uid) || { _id: item._id, name: 'Unknown User' },
       totalPaid: round2(item.totalPaid),
       transactionsPaid: item.paidCount,
     };
-  }
+  });
 
   return {
     tripId,
     currency: trip.currency,
     totalExpenses,
     categoryBreakdown,
-    payerStatistics: Object.values(paidByUserMap),
+    payerStatistics,
   };
 };
 
 /**
- * Multi-Party Debt Simplification & Settlement Calculation
- *
- * Implements a true multi-party settlement algorithm:
- * 1. Calculates exact net balance for each person: netBalance = totalPaid - totalShare
- * 2. Does NOT assume anyone owes the trip owner.
- * 3. Uses greedy two-pointer matching to minimize the number of transfer transactions.
+ * Multi-Party Debt Simplification & Settlement Calculation (batch user lookup — no N+1)
  */
 export const calculateSettlements = async (tripId) => {
-  const trip = await Trip.findById(tripId).select('currency');
+  const trip = await Trip.findById(tripId).select('currency owner');
   if (!trip) {
     throw new ApiError(404, 'Trip not found');
   }
@@ -459,7 +616,6 @@ export const calculateSettlements = async (tripId) => {
 
   const userMap = {};
 
-  // Initialize all known trip members
   members.forEach((m) => {
     if (m.userId) {
       const uId = m.userId._id.toString();
@@ -475,53 +631,54 @@ export const calculateSettlements = async (tripId) => {
     }
   });
 
-  // Calculate contributions and shares across all expenses
-  let totalTripSpending = 0;
-
+  // Collect any historic payers/participants who may have since left the trip in ONE batch query
+  const missingUserIds = new Set();
   for (const exp of expenses) {
-    totalTripSpending = round2(totalTripSpending + exp.amount);
     const payerId = exp.paidBy.toString();
+    if (!userMap[payerId]) missingUserIds.add(payerId);
+    for (const p of exp.participants || []) {
+      const pId = p.userId.toString();
+      if (!userMap[pId]) missingUserIds.add(pId);
+    }
+  }
 
-    // Ensure payer exists in map
-    if (!userMap[payerId]) {
-      const payerUser = await User.findById(payerId).select('name email profileImage');
-      userMap[payerId] = {
-        userId: payerId,
-        name: payerUser ? payerUser.name : 'Unknown User',
-        email: payerUser ? payerUser.email : '',
-        profileImage: payerUser ? payerUser.profileImage : '',
+  if (missingUserIds.size > 0) {
+    const missingUsers = await User.find({
+      _id: { $in: Array.from(missingUserIds) },
+    })
+      .select('name email profileImage')
+      .lean();
+
+    const missingLookup = new Map(missingUsers.map((u) => [u._id.toString(), u]));
+    for (const uid of missingUserIds) {
+      const u = missingLookup.get(uid);
+      userMap[uid] = {
+        userId: uid,
+        name: u?.name || 'Former Member',
+        email: u?.email || '',
+        profileImage: u?.profileImage || '',
         totalPaid: 0,
         totalOwed: 0,
         netBalance: 0,
       };
     }
+  }
 
+  let totalTripSpending = 0;
+
+  for (const exp of expenses) {
+    totalTripSpending = round2(totalTripSpending + exp.amount);
+    const payerId = exp.paidBy.toString();
     userMap[payerId].totalPaid = round2(userMap[payerId].totalPaid + exp.amount);
 
-    // Track participants shares
-    if (exp.participants && exp.participants.length > 0) {
-      for (const p of exp.participants) {
-        const participantId = p.userId.toString();
-        if (!userMap[participantId]) {
-          const partUser = await User.findById(participantId).select('name email profileImage');
-          userMap[participantId] = {
-            userId: participantId,
-            name: partUser ? partUser.name : 'Participant',
-            email: partUser ? partUser.email : '',
-            profileImage: partUser ? partUser.profileImage : '',
-            totalPaid: 0,
-            totalOwed: 0,
-            netBalance: 0,
-          };
-        }
-        userMap[participantId].totalOwed = round2(userMap[participantId].totalOwed + (p.shareAmount || 0));
-      }
+    for (const p of exp.participants || []) {
+      const participantId = p.userId.toString();
+      userMap[participantId].totalOwed = round2(
+        userMap[participantId].totalOwed + (p.shareAmount || 0)
+      );
     }
   }
 
-  // Calculate net balance for each person
-  // Positive netBalance = Creditor (is owed money)
-  // Negative netBalance = Debtor (owes money)
   const userBalances = Object.values(userMap).map((u) => {
     const net = round2(u.totalPaid - u.totalOwed);
     return {
@@ -531,7 +688,6 @@ export const calculateSettlements = async (tripId) => {
     };
   });
 
-  // Separate debtors and creditors for settlement resolution
   const debtors = [];
   const creditors = [];
 
@@ -543,7 +699,6 @@ export const calculateSettlements = async (tripId) => {
     }
   });
 
-  // Sort debtors and creditors descending by amounts
   debtors.sort((a, b) => b.remainingDebt - a.remainingDebt);
   creditors.sort((a, b) => b.remainingCredit - a.remainingCredit);
 
@@ -551,12 +706,13 @@ export const calculateSettlements = async (tripId) => {
   let dIdx = 0;
   let cIdx = 0;
 
-  // Minimal transaction resolution
   while (dIdx < debtors.length && cIdx < creditors.length) {
     const debtor = debtors[dIdx];
     const creditor = creditors[cIdx];
 
-    const transferAmount = round2(Math.min(debtor.remainingDebt, creditor.remainingCredit));
+    const transferAmount = round2(
+      Math.min(debtor.remainingDebt, creditor.remainingCredit)
+    );
 
     if (transferAmount > 0) {
       settlements.push({
@@ -598,4 +754,3 @@ export default {
   getExpenseAnalytics,
   calculateSettlements,
 };
-
