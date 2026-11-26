@@ -11,10 +11,14 @@
       "bundleIdentifier": "com.samundarkesath.app"
     },
     "android": {
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#0B4F6C"
       },
-      "package": "com.samundarkesath.app"
+      "package": "com.samundarkesath.app",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -35,6 +39,16 @@
     ],
     "experiments": {
       "typedRoutes": false
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "effae041-8000-4784-9c46-6581037ef4ea"
+      }
     }
   }
 }

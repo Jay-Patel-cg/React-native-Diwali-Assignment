@@ -1,0 +1,38 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://samundar-ke-sath-backend.onrender.com/api",
+        "EXPO_PUBLIC_APP_NAME": "Samundar Ke Sath"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://samundar-ke-sath-backend.onrender.com/api",
+        "EXPO_PUBLIC_APP_NAME": "Samundar Ke Sath"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://samundar-ke-sath-backend.onrender.com/api",
+        "EXPO_PUBLIC_APP_NAME": "Samundar Ke Sath"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

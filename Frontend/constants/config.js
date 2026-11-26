@@ -1,6 +1,8 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
+const PRODUCTION_API_URL = 'https://samundar-ke-sath-backend.onrender.com/api';
+
 const isPrivateOrLocalHost = (hostname = '') => {
   if (!hostname) return true;
   if (
@@ -22,17 +24,19 @@ const parseConfiguredUrl = (rawUrl) => {
   if (!rawUrl) return null;
   const match = rawUrl.match(/^(https?):\/\/([^/:?#]+)(?::(\d+))?(\/[^?#]*)?/i);
   if (!match) return null;
+  const rawPath = (match[4] || '').replace(/\/+$/, '');
   return {
     protocol: match[1].toLowerCase(),
     hostname: match[2],
     port: match[3] || (match[1].toLowerCase() === 'https' ? '' : '5000'),
-    basePath: (match[4] || '/api').replace(/\/+$/, '') || '/api',
+    basePath: rawPath || '/api',
+    hasExplicitPath: rawPath.length > 0,
   };
 };
 
 /**
- * Resolves the backend API base URL cleanly across Web, iOS Simulator,
- * Android Emulator, and physical mobile devices via Expo hostUri or EXPO_PUBLIC_API_URL.
+ * Resolves the backend API base URL cleanly across Production APK builds,
+ * Web, iOS Simulator, Android Emulator, and physical mobile devices.
  */
 const resolveApiBaseUrl = () => {
   const configured = process.env.EXPO_PUBLIC_API_URL?.trim();
@@ -40,7 +44,16 @@ const resolveApiBaseUrl = () => {
 
   // Use explicit production/staging URLs directly (non-local, non-private LAN host)
   if (configured && (!parsed || !isPrivateOrLocalHost(parsed.hostname))) {
-    return configured.replace(/\/+$/, '');
+    const clean = configured.replace(/\/+$/, '');
+    if (parsed && !parsed.hasExplicitPath) {
+      return `${clean}/api`;
+    }
+    return clean;
+  }
+
+  // In production / release APK builds, never fall back to localhost or private LAN URLs
+  if (typeof __DEV__ !== 'undefined' && !__DEV__) {
+    return PRODUCTION_API_URL;
   }
 
   const port = parsed?.port || '5000';
@@ -91,8 +104,8 @@ const resolveApiBaseUrl = () => {
 export const APP_CONFIG = {
   appName: process.env.EXPO_PUBLIC_APP_NAME || 'Samundar Ke Sath',
   apiBaseUrl: resolveApiBaseUrl(),
-  requestTimeoutMs: 15000,
-  aiRequestTimeoutMs: 65000,
+  requestTimeoutMs: 60000,
+  aiRequestTimeoutMs: 75000,
   defaultCurrency: 'INR',
   googleClientIds: {
     web: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '',
